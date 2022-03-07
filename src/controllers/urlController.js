@@ -7,7 +7,7 @@ const { promisify } = require("util");
 
 
 
-//Connect to redis
+//!Connect to redis
 const redisClient = redis.createClient
     (
         14561,
@@ -25,7 +25,7 @@ redisClient.on("connect", async function () {
 const SET_ASYNC = promisify(redisClient.SET).bind(redisClient);
 const GET_ASYNC = promisify(redisClient.GET).bind(redisClient);
 
-//------------------------1.Create URL---------------------------------------------------------
+//!------------------------1.Create URL---------------------------------------------------------
 
 const createUrl = async function (req, res) {
     try {
@@ -63,35 +63,25 @@ const createUrl = async function (req, res) {
 
 
         if (validUrl.isUri(longUrl)) {
-            let urlInfo1 = await GET_ASYNC(`${longUrl}`)
-
-            if (urlInfo1) {
-                let urlInfo2 = JSON.parse(urlInfo1)
-                let urlInfo3 = { longUrl: urlInfo2.longUrl, shortUrl: urlInfo2.shortUrl, urlCode: urlInfo2.urlCode }
-                return res.status(200).send({ status: true, message: "Data from the cache", data: urlInfo3 })
-
-            } else {
-
-                const url = await urlModel.findOne({ longUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
+        
+            const url = await urlModel.findOne({ longUrl }).select({ _id: 0, longUrl: 1, shortUrl: 1, urlCode: 1 })
 
                 if (url) {
-                    await SET_ASYNC(`${longUrl}`, JSON.stringify(url))
+                    await SET_ASYNC(`${url.urlCode}`, JSON.stringify(url))
                     res.status(200).send({ status: true, msg: "Fetch from DB", data: url })
                 }
                 else {
                     const urlCode = shortid.generate().toLowerCase()
                     const shortUrl = baseUrl + '/' + urlCode
 
-
                     let urlData = { longUrl, shortUrl, urlCode }
                     const details = await urlModel.create(urlData);
-                    await SET_ASYNC(`${longUrl}`, JSON.stringify(details))
+                    await SET_ASYNC(`${urlCode}`, JSON.stringify(details))
                     const resUrl = { longUrl: details.longUrl, shortUrl, urlCode }
-                    res.status(201).json({ status: true, msg: "New Url create", data: resUrl })
+                    res.status(201).send({ status: true, msg: "New Url create", data: resUrl })
                 }
-            }
-        }
-        else {
+        
+        }else {
             return res.status(400).send({ status: false, msg: 'Invalid longUrl' })
         }
     }
@@ -104,15 +94,17 @@ const createUrl = async function (req, res) {
 
 
 
-//----------------------------------------2.Get Url---------------------------------------------------------------
+//!----------------------------------------2. Get Url-----------------------------------------------------------
 const getUrl = async function (req, res) {
     try {
         const urlCode = req.params.urlCode;
 
-        let cahcedProfileData = await GET_ASYNC(`${req.params.urlCode}`)
+        let cahcedProfileData = await GET_ASYNC(`${urlCode}`)
 
         if (cahcedProfileData) {
+            
             let cahcedProfileData1 = JSON.parse(cahcedProfileData)
+            // console.log("cahce")
             return res.redirect(302, cahcedProfileData1.longUrl)
 
         }
@@ -123,8 +115,8 @@ const getUrl = async function (req, res) {
                 return res.status(400).send({ status: false, message: "Url Not Found!!" })
             }
             else {
-                await SET_ASYNC(`${req.params.urlCode}`, JSON.stringify(url))//redis take argument as string
-
+                await SET_ASYNC(`${req.params.urlCode}`, JSON.stringify(url)) //redis take argument as string
+                // console.log("db")
                 return res.redirect(302, url.longUrl)
             }
         }
@@ -133,4 +125,5 @@ const getUrl = async function (req, res) {
         res.status(500).send({ status: false, message: error.message })
     }
 }
+
 module.exports = { createUrl, getUrl }
